@@ -190,3 +190,30 @@
   flex-direction: column;
   gap: 16px;
 }
+
+/* Mobil */
+@media (max-width: 700px) {
+  .scanner-canvas-wrap {
+    aspect-ratio: 3/4;  /* Telefon kamerası dikey */
+    border-radius: 8px;
+  }
+
+  .scanner-controls {
+    flex-wrap: wrap;
+  }
+
+  .btn-capture {
+    flex: 1;
+    font-size: 18px;
+    padding: 14px;
+  }
+
+  .scanner-status-bar {
+    font-size: 13px;
+    padding: 8px 12px;
+  }
+
+  .scanner-guide-box {
+    inset: 5% 15%;  /* Mobilde daha geniş kutu */
+  }
+}

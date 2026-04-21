@@ -61,3 +61,28 @@ body {
   overflow-y: auto;
   flex-shrink: 0;
 }
+
+/* Mobil */
+@media (max-width: 700px) {
+  .app-header h1 {
+    font-size: 16px;
+  }
+
+  .app-body {
+    flex-direction: column;
+    overflow-y: auto;
+  }
+
+  .scanner-pane {
+    padding: 12px;
+    flex: none;
+  }
+
+  .list-pane {
+    width: 100%;
+    border-left: none;
+    border-top: 1px solid #ddd;
+    overflow-y: visible;
+    flex-shrink: 1;
+  }
+}
