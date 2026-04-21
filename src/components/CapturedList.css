@@ -65,8 +65,8 @@
 }
 .btn-icon:hover { opacity: 0.8; }
 
-.btn-send-all {
-  background: #1e3a5f;
+.btn-whatsapp {
+  background: #25D366;
   color: white;
 }
 .btn-clear {
@@ -168,7 +168,11 @@
 }
 .item-btn:hover { opacity: 0.8; }
 
-.item-btn-ocr {
+.item-btn-whatsapp {
+  background: #25D366;
+  color: white;
+}
+.item-btn-save {
   background: #1e3a5f;
   color: white;
 }
