@@ -107,7 +107,11 @@ export default function Scanner({ onCapture }) {
     try {
       setCameraError(null)
       const stream = await navigator.mediaDevices.getUserMedia({
-        video: { width: { ideal: 1280 }, height: { ideal: 720 } }
+        video: {
+          width: { ideal: 1280 },
+          height: { ideal: 720 },
+          facingMode: { ideal: 'environment' }  // arka kamera
+        }
       })
       const video = videoRef.current
       if (!video) return
