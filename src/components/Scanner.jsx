@@ -1,99 +1,135 @@
 import { useRef, useEffect, useState, useCallback } from 'react'
 import './Scanner.css'
 
-// Durum makinesi
 const STATE = {
-  IDLE: 'IDLE',           // Kamera hazır, fiş bekleniyor
-  DETECTING: 'DETECTING', // Fiş algılandı, stabilite kontrol ediliyor
-  CAPTURED: 'CAPTURED',   // Fiş yakalandı, kaldırılması bekleniyor
+  IDLE: 'IDLE',
+  CALIBRATING: 'CALIBRATING', // Kamera açıldı, arka plan öğreniliyor
+  DETECTING: 'DETECTING',
+  CAPTURED: 'CAPTURED',
 }
 
 const STATE_LABELS = {
-  IDLE: 'Fiş Bekleniyor',
-  DETECTING: 'Fiş Algılandı...',
+  IDLE: 'Fiş Bekleniyor — Fişi Kutuya Getirin',
+  CALIBRATING: 'Hazırlanıyor... Kameradan Uzak Durun',
+  DETECTING: 'Fiş Algılandı — Sabit Tutun',
   CAPTURED: 'Yakalandı! Fişi Kaldırın',
 }
 
 const STATE_COLORS = {
   IDLE: '#6c757d',
+  CALIBRATING: '#3b82f6',
   DETECTING: '#f59e0b',
   CAPTURED: '#10b981',
 }
 
-// Laplacian variance ile bulanıklık skoru (yüksek = net)
-function blurScore(imageData, width, height, step = 2) {
-  const d = imageData.data
-  let sum = 0, sumSq = 0, count = 0
+// Sadece merkez bölgeyi analiz et (CSS guide box ile aynı: %10 üst/alt, %8 sol/sağ)
+const ROI = { top: 0.10, bottom: 0.90, left: 0.08, right: 0.92 }
 
-  for (let y = step; y < height - step; y += step) {
-    for (let x = step; x < width - step; x += step) {
-      const idx = (y * width + x) * 4
-      const gray = (d[idx] * 0.299 + d[idx + 1] * 0.587 + d[idx + 2] * 0.114)
-
-      const top  = d[((y - step) * width + x) * 4] * 0.299 + d[((y - step) * width + x) * 4 + 1] * 0.587 + d[((y - step) * width + x) * 4 + 2] * 0.114
-      const bot  = d[((y + step) * width + x) * 4] * 0.299 + d[((y + step) * width + x) * 4 + 1] * 0.587 + d[((y + step) * width + x) * 4 + 2] * 0.114
-      const left = d[(y * width + (x - step)) * 4] * 0.299 + d[(y * width + (x - step)) * 4 + 1] * 0.587 + d[(y * width + (x - step)) * 4 + 2] * 0.114
-      const right= d[(y * width + (x + step)) * 4] * 0.299 + d[(y * width + (x + step)) * 4 + 1] * 0.587 + d[(y * width + (x + step)) * 4 + 2] * 0.114
-
-      const lap = gray * 4 - top - bot - left - right
-      sum += lap
-      sumSq += lap * lap
-      count++
-    }
-  }
-
-  const mean = sum / count
-  return (sumSq / count) - mean * mean
-}
-
-// İki frame arasındaki piksel farkı (0-255 arası ortalama)
-function frameDiff(a, b, sampleStep = 8) {
+// Merkez bölgedeki piksel farkı
+function zoneDiff(a, b, w, h) {
   const d1 = a.data, d2 = b.data
+  const x0 = Math.floor(w * ROI.left)
+  const x1 = Math.floor(w * ROI.right)
+  const y0 = Math.floor(h * ROI.top)
+  const y1 = Math.floor(h * ROI.bottom)
+  const step = 6
   let total = 0, count = 0
-  for (let i = 0; i < d1.length; i += 4 * sampleStep) {
-    total += Math.abs(d1[i] - d2[i]) + Math.abs(d1[i + 1] - d2[i + 1]) + Math.abs(d1[i + 2] - d2[i + 2])
-    count += 3
+
+  for (let y = y0; y < y1; y += step) {
+    for (let x = x0; x < x1; x += step) {
+      const i = (y * w + x) * 4
+      total += Math.abs(d1[i] - d2[i]) + Math.abs(d1[i+1] - d2[i+1]) + Math.abs(d1[i+2] - d2[i+2])
+      count += 3
+    }
   }
   return total / count
 }
 
-// Config sabitleri
-const PRESENCE_THRESHOLD = 18    // Bu değerin üstünde piksel farkı = fiş var
-const STABLE_FRAMES = 12          // Kaç kare stabil kalmalı (yaklaşık 0.4 sn @ 30fps)
-const GONE_FRAMES = 8             // Kaç kare yok olmalı = fiş gitti
-const PROCESS_EVERY = 2           // Her N kareyi işle (performans)
+// Merkez bölgenin ortalama parlaklığı (fişler beyaz → yüksek, yüz → düşük)
+function zoneBrightness(frame, w, h) {
+  const d = frame.data
+  const x0 = Math.floor(w * ROI.left)
+  const x1 = Math.floor(w * ROI.right)
+  const y0 = Math.floor(h * ROI.top)
+  const y1 = Math.floor(h * ROI.bottom)
+  const step = 8
+  let sum = 0, count = 0
+
+  for (let y = y0; y < y1; y += step) {
+    for (let x = x0; x < x1; x += step) {
+      const i = (y * w + x) * 4
+      sum += d[i] * 0.299 + d[i+1] * 0.587 + d[i+2] * 0.114
+      count++
+    }
+  }
+  return sum / count
+}
+
+// Laplacian variance — merkez bölgede blur skoru
+function blurScore(frame, w, h) {
+  const d = frame.data
+  const x0 = Math.floor(w * ROI.left) + 2
+  const x1 = Math.floor(w * ROI.right) - 2
+  const y0 = Math.floor(h * ROI.top) + 2
+  const y1 = Math.floor(h * ROI.bottom) - 2
+  const step = 3
+  let sum = 0, sumSq = 0, count = 0
+
+  for (let y = y0; y < y1; y += step) {
+    for (let x = x0; x < x1; x += step) {
+      const idx = (y * w + x) * 4
+      const gray  = d[idx]*0.299 + d[idx+1]*0.587 + d[idx+2]*0.114
+      const top   = d[((y-1)*w+x)*4]*0.299 + d[((y-1)*w+x)*4+1]*0.587 + d[((y-1)*w+x)*4+2]*0.114
+      const bot   = d[((y+1)*w+x)*4]*0.299 + d[((y+1)*w+x)*4+1]*0.587 + d[((y+1)*w+x)*4+2]*0.114
+      const left  = d[(y*w+(x-1))*4]*0.299 + d[(y*w+(x-1))*4+1]*0.587 + d[(y*w+(x-1))*4+2]*0.114
+      const right = d[(y*w+(x+1))*4]*0.299 + d[(y*w+(x+1))*4+1]*0.587 + d[(y*w+(x+1))*4+2]*0.114
+      const lap = gray*4 - top - bot - left - right
+      sum += lap; sumSq += lap*lap; count++
+    }
+  }
+  const mean = sum / count
+  return (sumSq / count) - mean * mean
+}
+
+// Eşikler
+const PRESENCE_THRESHOLD = 22   // piksel farkı eşiği
+const MIN_BRIGHTNESS     = 140  // en az bu kadar parlak olmalı (fiş=beyaz, yüz=ten)
+const STABLE_FRAMES      = 18   // ~0.6 sn stabil kalmalı
+const GONE_FRAMES        = 10   // bu kadar kare yok olursa "fiş gitti"
+const PROCESS_EVERY      = 2
+const CALIBRATION_MS     = 2500 // kamera açıldıktan sonra bu ms sonra arka planı yakala
 
 export default function Scanner({ onCapture }) {
-  const videoRef = useRef(null)
-  const canvasRef = useRef(null)        // Görünen canvas (display)
-  const offscreenRef = useRef(null)     // İşlem için offscreen canvas
-  const rafRef = useRef(null)
-  const stateRef = useRef(STATE.IDLE)
-  const bgFrameRef = useRef(null)       // Arka plan referans karesi
+  const videoRef    = useRef(null)
+  const canvasRef   = useRef(null)
+  const offscreenRef = useRef(null)
+  const rafRef      = useRef(null)
+  const stateRef    = useRef(STATE.CALIBRATING)
+  const bgFrameRef  = useRef(null)
   const stableCountRef = useRef(0)
-  const goneCountRef = useRef(0)
-  const bestFrameRef = useRef(null)
-  const bestScoreRef = useRef(0)
-  const frameCountRef = useRef(0)
+  const goneCountRef   = useRef(0)
+  const bestFrameRef   = useRef(null)
+  const bestScoreRef   = useRef(0)
+  const frameCountRef  = useRef(0)
 
-  const [uiState, setUiState] = useState(STATE.IDLE)
-  const [score, setScore] = useState(0)
+  const [uiState, setUiState]       = useState(STATE.CALIBRATING)
+  const [score, setScore]           = useState(0)
+  const [brightness, setBrightness] = useState(0)
   const [captureCount, setCaptureCount] = useState(0)
-  const [cameraError, setCameraError] = useState(null)
-  const [isRunning, setIsRunning] = useState(false)
+  const [cameraError, setCameraError]   = useState(null)
+  const [isRunning, setIsRunning]       = useState(false)
 
   const setState = useCallback((s) => {
     stateRef.current = s
     setUiState(s)
   }, [])
 
-  // Arka planı kaydet (fiş yokken çağrılır)
   const captureBackground = useCallback(() => {
     const offscreen = offscreenRef.current
     if (!offscreen) return
-    const ctx = offscreen.getContext('2d')
-    bgFrameRef.current = ctx.getImageData(0, 0, offscreen.width, offscreen.height)
-  }, [])
+    bgFrameRef.current = offscreen.getContext('2d').getImageData(0, 0, offscreen.width, offscreen.height)
+    setState(STATE.IDLE)
+  }, [setState])
 
   const processFrame = useCallback(() => {
     const video = videoRef.current
@@ -106,68 +142,55 @@ export default function Scanner({ onCapture }) {
     const offCtx = offscreen.getContext('2d')
     const dispCtx = canvas.getContext('2d')
 
-    // Offscreen'e kareyi çiz
     offCtx.drawImage(video, 0, 0, w, h)
-
-    // Display canvas'a göster
     dispCtx.drawImage(offscreen, 0, 0, canvas.width, canvas.height)
 
     frameCountRef.current++
     if (frameCountRef.current % PROCESS_EVERY !== 0) return
+    if (!bgFrameRef.current) return
+    if (stateRef.current === STATE.CALIBRATING) return
 
     const currentFrame = offCtx.getImageData(0, 0, w, h)
+    const diff  = zoneDiff(bgFrameRef.current, currentFrame, w, h)
+    const brt   = zoneBrightness(currentFrame, w, h)
+    const score = blurScore(currentFrame, w, h)
 
-    // Arka plan yoksa kaydet
-    if (!bgFrameRef.current) {
-      bgFrameRef.current = currentFrame
-      return
-    }
+    setScore(Math.round(score))
+    setBrightness(Math.round(brt))
 
-    const diff = frameDiff(bgFrameRef.current, currentFrame)
-    const currentScore = blurScore(currentFrame, w, h)
-    setScore(Math.round(currentScore))
+    // Fiş olabilmesi için hem yeterli fark hem yeterli parlaklık gerekli
+    const isReceipt = diff > PRESENCE_THRESHOLD && brt > MIN_BRIGHTNESS
 
     if (stateRef.current === STATE.IDLE) {
-      if (diff > PRESENCE_THRESHOLD) {
-        // Fiş algılandı
+      if (isReceipt) {
         setState(STATE.DETECTING)
         stableCountRef.current = 0
         bestScoreRef.current = 0
         bestFrameRef.current = null
-      } else {
-        // Arka planı güncelle (hafif drift'i önlemek için)
-        if (frameCountRef.current % 30 === 0) {
-          bgFrameRef.current = currentFrame
-        }
+      } else if (frameCountRef.current % 30 === 0) {
+        bgFrameRef.current = currentFrame // arka planı hafifçe güncelle
       }
     } else if (stateRef.current === STATE.DETECTING) {
-      if (diff < PRESENCE_THRESHOLD * 0.6) {
-        // Fiş gitti, IDLE'a dön
+      if (!isReceipt) {
         setState(STATE.IDLE)
         stableCountRef.current = 0
         return
       }
-      // En net kareyi takip et
-      if (currentScore > bestScoreRef.current) {
-        bestScoreRef.current = currentScore
+      if (score > bestScoreRef.current) {
+        bestScoreRef.current = score
         bestFrameRef.current = currentFrame
       }
       stableCountRef.current++
 
       if (stableCountRef.current >= STABLE_FRAMES) {
-        // Yakalandı!
         setState(STATE.CAPTURED)
         goneCountRef.current = 0
 
-        // Offscreen canvas'a en iyi kareyi çiz ve PNG olarak dışa aktar
         if (bestFrameRef.current) {
-          const captureCanvas = document.createElement('canvas')
-          captureCanvas.width = w
-          captureCanvas.height = h
-          const captureCtx = captureCanvas.getContext('2d')
-          captureCtx.putImageData(bestFrameRef.current, 0, 0)
-          const dataUrl = captureCanvas.toDataURL('image/jpeg', 0.92)
-          onCapture(dataUrl)
+          const cap = document.createElement('canvas')
+          cap.width = w; cap.height = h
+          cap.getContext('2d').putImageData(bestFrameRef.current, 0, 0)
+          onCapture(cap.toDataURL('image/jpeg', 0.92))
           setCaptureCount(c => c + 1)
         }
       }
@@ -175,7 +198,6 @@ export default function Scanner({ onCapture }) {
       if (diff < PRESENCE_THRESHOLD * 0.5) {
         goneCountRef.current++
         if (goneCountRef.current >= GONE_FRAMES) {
-          // Fiş kaldırıldı, arka planı güncelle ve IDLE'a dön
           bgFrameRef.current = currentFrame
           setState(STATE.IDLE)
           stableCountRef.current = 0
@@ -194,12 +216,9 @@ export default function Scanner({ onCapture }) {
   const startCamera = useCallback(async () => {
     try {
       setCameraError(null)
+      setState(STATE.CALIBRATING)
       const stream = await navigator.mediaDevices.getUserMedia({
-        video: {
-          width: { ideal: 1280 },
-          height: { ideal: 720 },
-          facingMode: 'environment'
-        }
+        video: { width: { ideal: 1280 }, height: { ideal: 720 } }
       })
       const video = videoRef.current
       if (!video) return
@@ -208,28 +227,24 @@ export default function Scanner({ onCapture }) {
 
       const vw = video.videoWidth || 1280
       const vh = video.videoHeight || 720
-
-      // Offscreen canvas boyutunu ayarla
       offscreenRef.current.width = vw
       offscreenRef.current.height = vh
-
-      // Display canvas'ı video oranında tut
       const canvas = canvasRef.current
-      canvas.width = vw
-      canvas.height = vh
+      canvas.width = vw; canvas.height = vh
 
       bgFrameRef.current = null
       frameCountRef.current = 0
       stableCountRef.current = 0
-      stateRef.current = STATE.IDLE
-      setUiState(STATE.IDLE)
       setIsRunning(true)
       rafRef.current = requestAnimationFrame(loop)
+
+      // 2.5 saniye sonra arka planı yakala — kullanıcı uzaklaşsın
+      setTimeout(captureBackground, CALIBRATION_MS)
     } catch (err) {
       setCameraError('Kamera erişim izni reddedildi veya kamera bulunamadı.')
       console.error(err)
     }
-  }, [loop])
+  }, [loop, captureBackground, setState])
 
   const stopCamera = useCallback(() => {
     if (rafRef.current) cancelAnimationFrame(rafRef.current)
@@ -239,18 +254,12 @@ export default function Scanner({ onCapture }) {
       video.srcObject = null
     }
     setIsRunning(false)
-    setState(STATE.IDLE)
+    setState(STATE.CALIBRATING)
   }, [setState])
-
-  const handleCalibrate = useCallback(() => {
-    captureBackground()
-  }, [captureBackground])
 
   useEffect(() => {
     offscreenRef.current = document.createElement('canvas')
-    return () => {
-      if (rafRef.current) cancelAnimationFrame(rafRef.current)
-    }
+    return () => { if (rafRef.current) cancelAnimationFrame(rafRef.current) }
   }, [])
 
   return (
@@ -266,42 +275,38 @@ export default function Scanner({ onCapture }) {
                 <button className="btn btn-primary" onClick={startCamera}>Tekrar Dene</button>
               </div>
             ) : (
-              <button className="btn btn-primary btn-lg" onClick={startCamera}>
-                Kamerayı Başlat
-              </button>
+              <div className="start-prompt">
+                <p>Kamerayı başlat, sonra fişleri kutunun içine getirin</p>
+                <button className="btn btn-primary btn-lg" onClick={startCamera}>
+                  Kamerayı Başlat
+                </button>
+              </div>
             )}
           </div>
         )}
 
         {isRunning && (
-          <div
-            className="scanner-status-bar"
-            style={{ background: STATE_COLORS[uiState] }}
-          >
+          <div className="scanner-status-bar" style={{ background: STATE_COLORS[uiState] }}>
             <span className="status-dot" />
             <span>{STATE_LABELS[uiState]}</span>
             {uiState === STATE.DETECTING && (
-              <span className="score-badge">Netlik: {score}</span>
+              <span className="score-badge">Parlaklık: {brightness} | Netlik: {score}</span>
             )}
           </div>
         )}
 
-        {isRunning && uiState === STATE.IDLE && (
-          <div className="scanner-guide-box" />
-        )}
+        {isRunning && uiState === STATE.IDLE && <div className="scanner-guide-box" />}
+        {isRunning && uiState === STATE.DETECTING && <div className="scanner-guide-box detecting" />}
+        {isRunning && uiState === STATE.CAPTURED && <div className="scanner-guide-box captured" />}
       </div>
 
       {isRunning && (
         <div className="scanner-controls">
-          <button className="btn btn-secondary" onClick={handleCalibrate} title="Arka planı yeniden öğret">
-            Kalibre Et
+          <button className="btn btn-secondary" onClick={captureBackground} title="Arka planı yeniden öğret">
+            Yeniden Kalibre Et
           </button>
-          <span className="stats">
-            {captureCount} fiş tarandı
-          </span>
-          <button className="btn btn-danger" onClick={stopCamera}>
-            Durdur
-          </button>
+          <span className="stats">{captureCount} fiş tarandı</span>
+          <button className="btn btn-danger" onClick={stopCamera}>Durdur</button>
         </div>
       )}
 
