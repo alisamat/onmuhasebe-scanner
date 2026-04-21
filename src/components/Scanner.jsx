@@ -23,7 +23,7 @@ const STATE_COLORS = {
 }
 
 // Sadece merkez bölgeyi analiz et (CSS guide box ile aynı: %10 üst/alt, %8 sol/sağ)
-const ROI = { top: 0.10, bottom: 0.90, left: 0.08, right: 0.92 }
+const ROI = { top: 0.05, bottom: 0.95, left: 0.35, right: 0.65 }
 
 // Merkez bölgedeki piksel farkı
 function zoneDiff(a, b, w, h) {
