@@ -91,28 +91,54 @@
   font-size: 13px;
 }
 
-/* Fişin yerleştirileceği alanı gösteren kutu — dikey/portrait */
+/* Dikey guide kutusu */
 .scanner-guide-box {
   position: absolute;
-  inset: 5% 35%;
-  border: 2px dashed rgba(255,255,255,0.45);
+  inset: 5% 32%;
+  border: 2px dashed rgba(255,255,255,0.5);
   border-radius: 8px;
   pointer-events: none;
-  transition: border-color 0.3s;
+  transition: border-color 0.2s, box-shadow 0.2s;
+  overflow: hidden;
 }
-.scanner-guide-box.detecting {
+.scanner-guide-box.capturing {
   border: 3px solid #f59e0b;
-  box-shadow: 0 0 0 2px rgba(245,158,11,0.3);
+  box-shadow: 0 0 0 3px rgba(245,158,11,0.4);
 }
-.scanner-guide-box.captured {
-  border: 3px solid #10b981;
-  box-shadow: 0 0 0 2px rgba(16,185,129,0.3);
+
+/* Çekim ilerleme çubuğu */
+.capture-progress-bar {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  height: 4px;
+  background: #f59e0b;
+  transition: width 0.05s linear;
+  border-radius: 0 0 8px 8px;
 }
+
+.status-idle { background: #6c757d; }
+.status-capturing { background: #f59e0b; }
 
 .scanner-controls {
   display: flex;
   align-items: center;
   gap: 12px;
+}
+
+.btn-capture {
+  background: #1e3a5f;
+  color: white;
+  padding: 12px 28px;
+  font-size: 16px;
+  border-radius: 10px;
+}
+.btn-capture:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+.btn-capture-active {
+  background: #f59e0b;
 }
 
 .stats {
