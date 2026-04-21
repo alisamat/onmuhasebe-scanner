@@ -129,6 +129,11 @@
   gap: 12px;
 }
 
+.toggles {
+  display: flex;
+  gap: 12px;
+}
+
 .toggle-label {
   display: flex;
   align-items: center;
@@ -138,6 +143,19 @@
   cursor: pointer;
   user-select: none;
 }
+
+.torch-btn {
+  margin-left: auto;
+  background: rgba(255,255,255,0.2);
+  border: none;
+  border-radius: 6px;
+  padding: 2px 8px;
+  cursor: pointer;
+  font-size: 16px;
+  transition: background 0.2s;
+}
+.torch-btn:hover { background: rgba(255,255,255,0.35); }
+.torch-btn.torch-on { background: rgba(255,220,0,0.4); }
 
 .guide-hint {
   position: absolute;
