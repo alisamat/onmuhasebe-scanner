@@ -1,6 +1,7 @@
 import { useState, useRef } from 'react'
 import './FisPicker.css'
 
+
 async function sendToWhatsApp(files) {
   if (navigator.canShare && navigator.canShare({ files })) {
     await navigator.share({ files, title: `${files.length} Fiş` })
@@ -14,6 +15,7 @@ export default function FisPicker() {
   const [sending, setSending] = useState(false)
   const [result, setResult] = useState(null)
   const inputRef = useRef(null)
+  const cameraRef = useRef(null)
 
   const handleFiles = (e) => {
     const files = Array.from(e.target.files)
@@ -67,21 +69,39 @@ export default function FisPicker() {
   return (
     <div className="picker">
 
-      {/* Seç butonu */}
-      <div className="picker-select-area" onClick={() => inputRef.current.click()}>
-        <div className="select-icon">📂</div>
-        <div className="select-text">
-          <strong>Fotoğraf Seç</strong>
-          <span>Galeriden birden fazla fiş seçebilirsin</span>
+      {/* Seç butonları */}
+      <div className="picker-buttons-row">
+        <div className="picker-select-area" onClick={() => inputRef.current.click()}>
+          <div className="select-icon">📂</div>
+          <div className="select-text">
+            <strong>Fotoğraf</strong>
+            <span>Galeriden birden fazla fiş seçebilirsin</span>
+          </div>
+          <input
+            ref={inputRef}
+            type="file"
+            accept="image/*"
+            multiple
+            onChange={handleFiles}
+            style={{ display: 'none' }}
+          />
         </div>
-        <input
-          ref={inputRef}
-          type="file"
-          accept="image/*"
-          multiple
-          onChange={handleFiles}
-          style={{ display: 'none' }}
-        />
+
+        <div className="picker-select-area" onClick={() => cameraRef.current.click()}>
+          <div className="select-icon">📷</div>
+          <div className="select-text">
+            <strong>Kamera</strong>
+            <span>Doğrudan fotoğraf çek</span>
+          </div>
+          <input
+            ref={cameraRef}
+            type="file"
+            accept="image/*"
+            capture="environment"
+            onChange={handleFiles}
+            style={{ display: 'none' }}
+          />
+        </div>
       </div>
 
       {/* Fotoğraf listesi */}
