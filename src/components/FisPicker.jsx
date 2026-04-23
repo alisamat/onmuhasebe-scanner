@@ -15,7 +15,6 @@ export default function FisPicker() {
   const [sending, setSending] = useState(false)
   const [result, setResult] = useState(null)
   const inputRef = useRef(null)
-  const cameraRef = useRef(null)
 
   const handleFiles = (e) => {
     const files = Array.from(e.target.files)
@@ -69,42 +68,22 @@ export default function FisPicker() {
   return (
     <div className="picker">
 
-      {/* Seç butonları */}
-      <div className="picker-buttons-row">
-        <div className="picker-select-area" onClick={() => inputRef.current.click()}>
-          <div className="select-icon">📂</div>
-          <div className="select-text">
-            <strong>Fotoğraf</strong>
-            <span>Galeriden birden fazla fiş seçebilirsin</span>
-          </div>
-          <input
-            ref={inputRef}
-            type="file"
-            accept="image/*"
-            multiple
-            onChange={handleFiles}
-            style={{ display: 'none' }}
-          />
+      <div className="picker-select-area" onClick={() => inputRef.current.click()}>
+        <div className="select-icon">📂</div>
+        <div className="select-text">
+          <strong>Fotoğraf Seç</strong>
+          <span>Galeriden birden fazla fiş seçebilirsin</span>
         </div>
-
-        <div className="picker-select-area" onClick={() => cameraRef.current.click()}>
-          <div className="select-icon">📷</div>
-          <div className="select-text">
-            <strong>Kamera</strong>
-            <span>Doğrudan fotoğraf çek</span>
-          </div>
-          <input
-            ref={cameraRef}
-            type="file"
-            accept="image/*"
-            capture="environment"
-            onChange={handleFiles}
-            style={{ display: 'none' }}
-          />
-        </div>
+        <input
+          ref={inputRef}
+          type="file"
+          accept="image/*"
+          multiple
+          onChange={handleFiles}
+          style={{ display: 'none' }}
+        />
       </div>
 
-      {/* Fotoğraf listesi */}
       {items.length > 0 && (
         <>
           <div className="picker-toolbar">
@@ -121,7 +100,6 @@ export default function FisPicker() {
               </div>
             ))}
 
-            {/* Daha fazla ekle */}
             <div className="picker-thumb picker-add" onClick={() => inputRef.current.click()}>
               <span>+ Ekle</span>
             </div>
@@ -147,7 +125,7 @@ export default function FisPicker() {
 
       {items.length === 0 && (
         <div className="picker-empty">
-          <p>Önce native kameranla fişleri çek, sonra buradan seçip toplu gönder.</p>
+          <p>Galeriden fişleri seç, toplu WhatsApp'a gönder.</p>
         </div>
       )}
     </div>
