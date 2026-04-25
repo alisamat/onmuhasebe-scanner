@@ -1,6 +1,8 @@
 import { useState, useRef } from 'react'
 import './FisPicker.css'
 
+const urlParams = new URLSearchParams(window.location.search)
+const hedefMukellef = urlParams.get('mukellef')
 
 async function sendToWhatsApp(files) {
   if (navigator.canShare && navigator.canShare({ files })) {
@@ -67,6 +69,13 @@ export default function FisPicker() {
 
   return (
     <div className="picker">
+
+      {hedefMukellef && (
+        <div className="picker-mukellef-banner">
+          <span className="picker-mukellef-label">Hedef Mükellef</span>
+          <span className="picker-mukellef-adi">👤 {hedefMukellef}</span>
+        </div>
+      )}
 
       <div className="picker-select-area" onClick={() => inputRef.current.click()}>
         <div className="select-icon">📂</div>
