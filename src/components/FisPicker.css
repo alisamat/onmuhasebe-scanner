@@ -156,6 +156,17 @@
 }
 .picker-add:hover { border-color: #1e3a5f; color: #1e3a5f; }
 
+/* Hedef mükellef satırı (gönder butonunun üstü) */
+.picker-hedef-satir {
+  text-align: center;
+  font-size: 14px;
+  color: #5b21b6;
+  background: #ede9fe;
+  border-radius: 8px;
+  padding: 8px 12px;
+  margin-bottom: 8px;
+}
+
 /* Gönder butonu */
 .picker-actions {
   position: sticky;

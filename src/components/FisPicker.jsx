@@ -121,6 +121,11 @@ export default function FisPicker() {
           )}
 
           <div className="picker-actions">
+            {hedefMukellef && (
+              <div className="picker-hedef-satir">
+                👤 <strong>{hedefMukellef}</strong>'a gönderilecek
+              </div>
+            )}
             <button
               className="btn-whatsapp-main"
               onClick={handleSendWhatsApp}
